@@ -14,7 +14,7 @@ It learns to predict part-indicative colors while reconstructing geometry, and u
 - **State-of-the-Art Accuracy**: Consistently surpasses P3-SAM, delivering a **40%** gain in IoU@1 for single-click interaction on PartObjaverse-Tiny and PartNeXT, and a **15%** improvement in overall IoU for unguided full segmentation averaged across datasets.
 
 
-## 🔨Installation
+## 🔨 Installation
 
 ### Prerequisites
 - **System**: Linux
@@ -47,7 +47,7 @@ It learns to predict part-indicative colors while reconstructing geometry, and u
 
 The checkpoints of **Interactive part-segmentation**, **Full segmentation** and **Full segmentation with 2D guidance** are available on [Hugging Face](https://huggingface.co/fenghora/SegviGen).
 
-## 📒Usage
+## 📒 Usage
 
 - **Interactive part-segmentation**
     ```sh
@@ -83,7 +83,7 @@ The checkpoints of **Interactive part-segmentation**, **Full segmentation** and 
         --two_d_map
     ```
 
-## 🔥Training
+## 🔥 Training
 
 ### Data preparation
 
@@ -114,3 +114,9 @@ The checkpoints of **Interactive part-segmentation**, **Full segmentation** and 
         --dataset_path ./data_toolkit/assets/full_seg_w_2d_map/dataset.json \
         --ckpts_path path/to/ckpts_full_seg_w_2d_map
     ```
+
+## ⚖️ License
+
+This project is licensed under the [MIT License](https://github.com/Nelipot-Lee/SegviGen/blob/main/LICENSE).  
+However, please note that the code in **`trellis2`** originates from the [TRELLIS.2](https://github.com/Microsoft/TRELLIS.2) project and remains subject to its original license terms.  
+Users must comply with the licensing requirements of [TRELLIS.2](https://github.com/Microsoft/TRELLIS.2) when using or redistributing that portion of the code.
