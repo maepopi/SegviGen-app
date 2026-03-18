@@ -1,0 +1,34 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Model checkpoints
+ckpt/
+*.ckpt
+*.pth
+*.safetensors
+
+# Intermediate files
+*.vxz
+*.vxz.tmp
+
+# TRELLIS.2 submodule / local copy
+TRELLIS.2/
+
+# HuggingFace cache / model dirs
+microsoft/
+
+# Gradio temp
+gradio_cached_examples/
+flagged/
+
+# Misc
+.DS_Store
+*.log
+tmp/
