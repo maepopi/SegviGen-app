@@ -206,7 +206,7 @@ All tabs expose two collapsible parameter panels:
 
 ## 🙏 Credits
 
-- **[Dickoah](https://github.com/Dickoah)** — main contributor for the 2D segmentation pipeline (Pixmesh guidance map generation)
+- **[Dickoah](https://github.com/Dickoah)** — my dear friend, and main contributor for the 2D segmentation pipeline (Pixmesh guidance map generation)
 - **[Claude](https://claude.ai)** (Anthropic) — assisted in building the FastAPI backend and React frontend
 
 ---
