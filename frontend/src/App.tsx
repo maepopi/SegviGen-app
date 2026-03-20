@@ -1,0 +1,117 @@
+import { useState, useCallback } from 'react'
+import { uploadFile } from './api/client'
+import { InteractiveTab } from './components/tabs/InteractiveTab'
+import { FullTab }        from './components/tabs/FullTab'
+import { Full2DTab }      from './components/tabs/Full2DTab'
+import { GuidanceTab }    from './components/tabs/GuidanceTab'
+import { Upload, Layers, Grid2x2, Wand2, Map } from 'lucide-react'
+
+type TabId = 'interactive' | 'full' | 'full2d' | 'guidance'
+
+const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode; short: string }> = [
+  { id: 'interactive', label: 'Interactive',      icon: <Layers size={15} />,  short: 'Interactive' },
+  { id: 'full',        label: 'Full',             icon: <Grid2x2 size={15} />, short: 'Full' },
+  { id: 'full2d',      label: 'Full + 2D Map',    icon: <Wand2 size={15} />,   short: 'Full + 2D' },
+  { id: 'guidance',    label: 'Prepare 2D Map',   icon: <Map size={15} />,     short: 'Prepare Map' },
+]
+
+export default function App() {
+  const [activeTab,      setActiveTab]      = useState<TabId>('interactive')
+  const [uploadedPath,   setUploadedPath]   = useState<string | null>(null)
+  const [uploadedName,   setUploadedName]   = useState<string | null>(null)
+  const [dragOver,       setDragOver]       = useState(false)
+  const [guidancePath,   setGuidancePath]   = useState<string | null>(null)
+
+  const handleUpload = useCallback(async (file: File) => {
+    setUploadedName('Uploading…')
+    const path = await uploadFile(file)
+    setUploadedPath(path)
+    setUploadedName(file.name)
+  }, [])
+
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault(); setDragOver(false)
+    const file = e.dataTransfer.files[0]
+    if (file) handleUpload(file)
+  }, [handleUpload])
+
+  const onFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) handleUpload(file)
+  }, [handleUpload])
+
+  function useAsGuidance(path: string) {
+    setGuidancePath(path)
+    setActiveTab('full2d')
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-bg">
+
+      {/* ── Header ── */}
+      <header className="flex items-center gap-3 px-5 h-13 border-b border-border bg-bg/90 backdrop-blur-sm sticky top-0 z-50 shrink-0"
+        style={{ height: '52px' }}>
+        <span className="text-accent font-bold text-lg tracking-tight">SegviGen</span>
+        <span className="text-dim text-xs">3D Part Segmentation</span>
+      </header>
+
+      <div className="flex flex-1 overflow-hidden">
+
+        {/* ── Sidebar ── */}
+        <aside className="w-52 shrink-0 bg-card border-r border-border flex flex-col gap-4 p-3 overflow-y-auto">
+
+          {/* Upload */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-dim mb-2">Input Model</p>
+            <label
+              onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+              className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl p-4 cursor-pointer transition-all
+                ${dragOver ? 'border-accent bg-accent/10' : 'border-border hover:border-accent/50 hover:bg-hover'}`}
+            >
+              <input type="file" accept=".glb,.obj,.ply" className="hidden" onChange={onFileChange} />
+              <Upload size={20} className="text-muted" />
+              <p className="text-xs text-muted text-center leading-tight">
+                {uploadedName ?? 'Drop GLB / OBJ / PLY\nor click to browse'}
+              </p>
+            </label>
+          </div>
+
+          {/* Nav */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-dim mb-2">Mode</p>
+            <nav className="flex flex-col gap-1">
+              {TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-left transition-all
+                    ${activeTab === tab.id
+                      ? 'bg-accent/10 text-accent font-semibold'
+                      : 'text-muted hover:bg-hover hover:text-white'}`}
+                >
+                  {tab.icon}
+                  {tab.short}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          <div className="mt-auto text-[11px] text-dim leading-relaxed">
+            Base models cached on first run.<br />
+            Checkpoints cached per path.
+          </div>
+        </aside>
+
+        {/* ── Main content ── */}
+        <main className="flex-1 overflow-y-auto p-6">
+          {activeTab === 'interactive' && <InteractiveTab glbPath={uploadedPath} />}
+          {activeTab === 'full'        && <FullTab        glbPath={uploadedPath} />}
+          {activeTab === 'full2d'      && <Full2DTab      glbPath={uploadedPath} initialGuidancePath={guidancePath} />}
+          {activeTab === 'guidance'    && <GuidanceTab    glbPath={uploadedPath} onUseAsGuidance={useAsGuidance} />}
+        </main>
+      </div>
+    </div>
+  )
+}
