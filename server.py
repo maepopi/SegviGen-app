@@ -9,6 +9,7 @@ import shutil
 import tempfile
 import threading
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -20,9 +21,53 @@ from pydantic import BaseModel
 import inference as inf
 import guidance_map as gmap
 
+# ─── Checkpoint auto-download ──────────────────────────────────────────────────
+
+_CKPT_DIR = Path(__file__).parent / "ckpt"
+_HF_REPO  = "fenghora/SegviGen"
+_CHECKPOINTS = [
+    "interactive_seg.ckpt",
+    "full_seg.ckpt",
+    "full_seg_w_2d_map.ckpt",
+]
+
+def ensure_checkpoints() -> None:
+    """Download any missing checkpoints from HuggingFace."""
+    _CKPT_DIR.mkdir(exist_ok=True)
+    missing = [n for n in _CHECKPOINTS if not (_CKPT_DIR / n).exists()]
+    if not missing:
+        return
+
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError:
+        print("[SegviGen] WARNING: huggingface_hub not installed — cannot auto-download checkpoints.")
+        print(f"[SegviGen] Download them manually from https://huggingface.co/{_HF_REPO}")
+        return
+
+    for name in missing:
+        print(f"[SegviGen] Checkpoint not found: {name}")
+        print(f"[SegviGen] Downloading from {_HF_REPO} ...")
+        try:
+            hf_hub_download(
+                repo_id=_HF_REPO,
+                filename=name,
+                local_dir=str(_CKPT_DIR),
+            )
+            print(f"[SegviGen] ✓ {name}")
+        except Exception as exc:
+            print(f"[SegviGen] ✗ Failed to download {name}: {exc}")
+            print(f"[SegviGen] Download it manually from https://huggingface.co/{_HF_REPO}")
+
+
 # ─── App setup ─────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="SegviGen")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    ensure_checkpoints()
+    yield
+
+app = FastAPI(title="SegviGen", lifespan=lifespan)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 # Serve /assets/* directly (Vite output references /assets/... not /static/assets/...)
