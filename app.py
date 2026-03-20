@@ -861,128 +861,77 @@ def run_split(
 
 def _make_split_controls(prefix):
     """Return a dict of Gradio components for the splitter accordion."""
-    with gr.Accordion("Advanced segmentation (split) options", open=False):
-
-        gr.Markdown(
-            "**How splitting works:** SegviGen encodes part labels as distinct solid colors in "
-            "the output texture (the paper calls this *part-indicative colorization*). "
-            "Splitting reads that texture, groups faces by color, and exports one mesh object "
-            "per color group. These parameters control palette detection and cleanup.\n\n"
-            "**Presets:** "
-            "Most parts → step=1, min px=1, max colors=1024, merge dist=0, min faces=1, iters=0 | "
-            "Balanced (default) → step=16, min px=500, merge dist=32, min faces=50, iters=3 | "
-            "Fewest/cleanest → step=32, min px=2000, merge dist=64, min faces=200, iters=8"
-        )
+    with gr.Accordion("Split parameters", open=False):
+        gr.Markdown("**Presets:**")
+        with gr.Row():
+            _spl_max = gr.Button("🔪 Max Parts", size="sm")
+            _spl_bal = gr.Button("⚖️ Balanced",  size="sm", variant="primary")
+            _spl_cln = gr.Button("✨ Cleanest",  size="sm")
 
         gr.Markdown("##### Color palette")
         color_quant_step = gr.Slider(1, 64, value=16, step=1, label="Color quantization step",
-            info="Snaps each RGB channel to a grid before building the palette. "
-                 "SegviGen assigns solid colors to parts during training, but texture compression "
-                 "and anti-aliasing introduce slight variation within each color. "
-                 "→ Recommended: 16 (default) — handles compression artifacts while keeping "
-                 "distinct part colors separate. "
-                 "Use 1–4 to maximize the number of parts (every shade is its own entry). "
-                 "Use 32–64 to merge similar hues and produce fewer, larger parts.")
+            info="Snaps RGB to a coarser grid before reading the palette. Lower = more parts. "
+                 "→ 16 default · 1 for max parts · 32–64 for fewer, larger parts")
         palette_sample_pixels = gr.Number(value=2_000_000, precision=0, label="Palette sample pixels",
-            info="Pixels randomly sampled from the texture to discover the color palette. "
-                 "→ Recommended: 2 000 000 (default) — covers even 4K textures reliably. "
-                 "Raise to 5 000 000+ only if small parts on very large textures are being missed. "
-                 "Lowering speeds things up but risks dropping rare part colors from the palette.")
+            info="Pixels sampled from the texture to discover part colors. "
+                 "→ 2 000 000 default. Raise to 5 000 000+ only if small parts are missing on large textures.")
         palette_min_pixels = gr.Number(value=500, precision=0, label="Palette min pixels",
-            info="Minimum pixel count for a color to be kept in the palette. "
-                 "Filters out anti-aliasing blends and JPEG artifacts at part edges. "
-                 "→ Recommended: 500 (default) for balanced results. "
-                 "Set to 1 for maximum parts (every color survives, including noise). "
-                 "Raise to 1 000–5 000 if you see many tiny noise fragments in the split output. "
-                 "Raise to 10 000+ for very aggressive cleanup on blurry or compressed textures.")
+            info="Drop colors with fewer pixels than this (removes noise/compression artifacts). "
+                 "→ 500 default · 1 for max parts · 2 000+ for aggressive cleanup")
         palette_max_colors = gr.Number(value=256, precision=0, label="Palette max colors",
-            info="Hard cap on palette entries after ranking by pixel count. "
-                 "SegviGen can produce many distinct part colors especially in Full mode. "
-                 "→ Recommended: 256 (default) covers most models. "
-                 "Raise to 512 or 1024 if you run Full segmentation on a complex mesh with "
-                 "many semantic parts and some are being dropped. "
-                 "Lowering forces fewer parts regardless of other settings.")
+            info="Hard cap on the number of detected parts. Raise if some parts are missing. "
+                 "→ 256 default · 1024 for max parts on complex models")
         palette_merge_dist = gr.Number(value=32, precision=0, label="Palette merge distance",
-            info="Merges two palette entries if their Euclidean RGB distance is below this. "
-                 "Collapses near-duplicate colors from texture compression or slight shading "
-                 "variation within one semantic region. "
-                 "→ Recommended: 32 (default) — collapses duplicates without touching "
-                 "semantically distinct colors. "
-                 "Set to 0 to disable (more parts, noisier). "
-                 "Raise to 64 to merge visually similar but technically different colors. "
-                 "Raise to 100+ to dramatically reduce the part count.")
+            info="Merges two colors if their RGB distance is below this — fewer parts. "
+                 "→ 32 default · 0 for max parts · 64–100 for fewer, cleaner parts")
 
         gr.Markdown("##### Face sampling")
         samples_per_face = gr.Dropdown(choices=[1, 4], value=4, label="Samples per face",
-            info="UV sample points per triangle for color label voting. "
-                 "→ Recommended: 4 (default) — samples centroid + 3 near-vertex points, "
-                 "much more robust at seams and part boundaries. "
-                 "Use 1 (centroid only) only if splitting is too slow on very dense meshes.")
+            info="UV samples per triangle. 4 = robust at part edges (recommended). "
+                 "1 = faster on very dense meshes.")
         flip_v = gr.Checkbox(value=True, label="Flip V (glTF convention)",
-            info="glTF stores UV with V=0 at the top; most image libraries use V=0 at the bottom. "
-                 "→ Recommended: enabled (default) for all GLB files exported by SegviGen. "
-                 "Disable only if parts appear vertically mirrored in the split output.")
+            info="Required for standard GLB files. Disable only if parts look vertically mirrored.")
         uv_wrap_repeat = gr.Checkbox(value=True, label="UV wrap repeat",
-            info="How out-of-range UV coordinates (outside [0,1]) are handled. "
-                 "→ Recommended: enabled (default, mod-1 wrapping) — correct for SegviGen's "
-                 "output textures which are not tiled but may have UVs slightly outside range. "
-                 "Disable (clamp) only if you see incorrect colors on mesh borders.")
+            info="Handles UV coords outside [0,1] with wrapping. Keep enabled for SegviGen output.")
 
         gr.Markdown("##### Boundary refinement")
         transition_conf_thresh = gr.Slider(0.25, 1.0, value=1.0, step=0.25,
             label="Transition confidence threshold",
-            info="Confidence required before a face's label is changed during boundary propagation. "
-                 "At 1.0 this pass is fully disabled — original assignments are kept as-is. "
-                 "→ Recommended: 1.0 (default) — SegviGen's colorization is already clean; "
-                 "boundary propagation is rarely needed. "
-                 "Try 0.75 only if you see many single-face misclassifications at part edges. "
-                 "Use 0.25–0.5 for aggressive boundary smoothing (fewer, larger parts).")
+            info="At 1.0, disabled (recommended). Lower to 0.5–0.75 to smooth noisy boundaries. "
+                 "Lower values = fewer, larger parts.")
         transition_prop_iters = gr.Number(value=6, precision=0, label="Transition propagation iterations",
-            info="How many propagation passes run when threshold < 1.0. Has no effect at 1.0. "
-                 "→ Recommended: leave at 6 (default). If you lower the threshold, "
-                 "more iterations spread corrected labels further inward from boundaries.")
+            info="Passes when threshold < 1.0. No effect at 1.0. → 6 default")
         transition_neighbor_min = gr.Number(value=1, precision=0, label="Transition neighbor minimum",
-            info="Minimum agreeing physical neighbors required to relabel a face during propagation. "
-                 "Only active when threshold < 1.0. "
-                 "→ Recommended: 1 (default). Raise to 2–3 for more conservative relabelling "
-                 "(fewer changes, sharper boundaries) if the propagation over-smooths.")
+            info="Agreeing neighbors needed to relabel a face. Active only when threshold < 1.0. → 1 default")
 
         gr.Markdown("##### Small component cleanup")
         small_component_action = gr.Dropdown(choices=["reassign", "drop"], value="reassign",
             label="Small component action",
-            info="What to do with connected face groups smaller than the threshold below. "
-                 "→ Recommended: reassign (default) — absorbs fragments into the neighboring "
-                 "part with the most shared edges. Keeps all faces in the output. "
-                 "Use drop when you want clean isolated parts with no noise fragments, "
-                 "and don't mind losing a few faces at part edges.")
+            info="What to do with tiny isolated face groups. "
+                 "Reassign = merge into nearest neighbor · Drop = remove entirely")
         small_component_min_faces = gr.Number(value=50, precision=0, label="Small component min faces",
-            info="Connected regions with fewer faces than this are treated as noise fragments. "
-                 "→ Recommended: 50 (default) cleans up texture-boundary specks. "
-                 "Set to 1 to disable all cleanup (maximum parts, noisiest output). "
-                 "Raise to 100–200 for typical full-segmentation results. "
-                 "Raise to 500+ for aggressive cleanup that merges all small islands.")
+            info="Groups smaller than this are treated as noise. "
+                 "→ 50 default · 1 for max parts · 100–200 for cleaner output · 500+ very aggressive")
         postprocess_iters = gr.Number(value=3, precision=0, label="Post-process iterations",
-            info="Topology-smoothing passes: each pass finds same-color components smaller "
-                 "than the min-faces threshold and absorbs them into larger neighbors. "
-                 "→ Recommended: 3 (default) for light cleanup. "
-                 "Set to 0 for maximum parts with no post-processing. "
-                 "Use 5–8 for moderately clean output on complex meshes. "
-                 "Use 10+ for heavily smoothed output with fewer, larger parts.")
+            info="Extra smoothing passes after splitting. "
+                 "→ 3 default · 0 for max parts · 5–8 for cleaner output · 10+ very smooth")
 
         gr.Markdown("##### Output")
         min_faces_per_part = gr.Number(value=1, precision=0, label="Min faces per part",
-            info="Parts with fewer faces than this are dropped from the exported GLB. "
-                 "→ Recommended: 1 (default) — keep everything. "
-                 "Raise to 50–100 as a final safety filter after post-processing "
-                 "to drop any remaining micro-fragments without affecting the main parts. "
-                 "Raise to 500–1000 for game-ready exports where tiny parts are unwanted.")
+            info="Parts with fewer faces are dropped from the export. "
+                 "→ 1 default (keep all) · 50–100 as a final cleanup filter")
         bake_transforms = gr.Checkbox(value=True, label="Bake transforms",
-            info="Bakes each node's scene-graph transform into vertex positions before splitting, "
-                 "so all output parts share one consistent world-space coordinate system. "
-                 "→ Recommended: enabled (default) for all standard workflows. "
-                 "Disable only if you need to preserve the original node hierarchy for "
-                 "downstream tools that re-apply transforms (e.g. game engines with "
-                 "prefab-based rigs).")
+            info="Applies scene-graph transforms to vertex positions for consistent world-space coords. "
+                 "Keep enabled for all standard workflows.")
+
+    _spl_outs = [color_quant_step, palette_sample_pixels, palette_min_pixels,
+                 palette_max_colors, palette_merge_dist, samples_per_face,
+                 flip_v, uv_wrap_repeat, transition_conf_thresh, transition_prop_iters,
+                 transition_neighbor_min, small_component_action, small_component_min_faces,
+                 postprocess_iters, min_faces_per_part, bake_transforms]
+    _spl_max.click(fn=lambda: _split_preset_vals("max_parts"), outputs=_spl_outs)
+    _spl_bal.click(fn=lambda: _split_preset_vals("balanced"),  outputs=_spl_outs)
+    _spl_cln.click(fn=lambda: _split_preset_vals("cleanest"),  outputs=_spl_outs)
 
     return dict(
         color_quant_step=color_quant_step,
@@ -1004,106 +953,118 @@ def _make_split_controls(prefix):
     )
 
 
+# ─── Preset values ────────────────────────────────────────────────────────────
+
+_SAMPLER_PRESETS = {
+    "fast":     dict(steps=12,  rescale_t=1.0, guidance=7.5, guidance_rescale=0.0,
+                     gi_start=0.0, gi_end=1.0, decimation=50_000,  tex_size=512,
+                     remesh=True, remesh_band=1, remesh_proj=0),
+    "balanced": dict(steps=25,  rescale_t=1.0, guidance=7.5, guidance_rescale=0.0,
+                     gi_start=0.0, gi_end=1.0, decimation=100_000, tex_size=1024,
+                     remesh=True, remesh_band=1, remesh_proj=0),
+    "quality":  dict(steps=50,  rescale_t=1.5, guidance=7.5, guidance_rescale=0.0,
+                     gi_start=0.1, gi_end=0.9, decimation=300_000, tex_size=2048,
+                     remesh=True, remesh_band=0, remesh_proj=1),
+}
+
+_SPLIT_PRESETS = {
+    "max_parts": dict(color_quant_step=1,  palette_sample_pixels=2_000_000,
+                      palette_min_pixels=1,    palette_max_colors=1024, palette_merge_dist=0,
+                      samples_per_face=4, flip_v=True, uv_wrap_repeat=True,
+                      transition_conf_thresh=1.0, transition_prop_iters=6, transition_neighbor_min=1,
+                      small_component_action="reassign", small_component_min_faces=1,
+                      postprocess_iters=0, min_faces_per_part=1, bake_transforms=True),
+    "balanced":  dict(color_quant_step=16, palette_sample_pixels=2_000_000,
+                      palette_min_pixels=500,  palette_max_colors=256,  palette_merge_dist=32,
+                      samples_per_face=4, flip_v=True, uv_wrap_repeat=True,
+                      transition_conf_thresh=1.0, transition_prop_iters=6, transition_neighbor_min=1,
+                      small_component_action="reassign", small_component_min_faces=50,
+                      postprocess_iters=3, min_faces_per_part=1, bake_transforms=True),
+    "cleanest":  dict(color_quant_step=32, palette_sample_pixels=2_000_000,
+                      palette_min_pixels=2000, palette_max_colors=128,  palette_merge_dist=64,
+                      samples_per_face=4, flip_v=True, uv_wrap_repeat=True,
+                      transition_conf_thresh=1.0, transition_prop_iters=6, transition_neighbor_min=1,
+                      small_component_action="reassign", small_component_min_faces=200,
+                      postprocess_iters=8, min_faces_per_part=50, bake_transforms=True),
+}
+
+
+def _sampler_preset_vals(name):
+    p = _SAMPLER_PRESETS[name]
+    return (p["steps"], p["rescale_t"], p["guidance"], p["guidance_rescale"],
+            p["gi_start"], p["gi_end"], p["decimation"], p["tex_size"],
+            p["remesh"], p["remesh_band"], p["remesh_proj"])
+
+
+def _split_preset_vals(name):
+    p = _SPLIT_PRESETS[name]
+    return (p["color_quant_step"], p["palette_sample_pixels"], p["palette_min_pixels"],
+            p["palette_max_colors"], p["palette_merge_dist"], p["samples_per_face"],
+            p["flip_v"], p["uv_wrap_repeat"], p["transition_conf_thresh"],
+            p["transition_prop_iters"], p["transition_neighbor_min"],
+            p["small_component_action"], p["small_component_min_faces"],
+            p["postprocess_iters"], p["min_faces_per_part"], p["bake_transforms"])
+
+
 # ─── Sampler / export controls helper ─────────────────────────────────────────
 
 def _make_sampler_export_controls(default_steps=25, default_guidance=7.5):
-    """Render sampler + export parameter widgets with full descriptions."""
-    gr.Markdown("#### Sampler parameters")
-    steps = gr.Slider(1, 100, value=default_steps, step=1, label="Steps",
-        info="Number of flow-matching denoising steps. SegviGen inherits "
-             "TRELLIS.2's sampler: each step refines the part-color prediction "
-             "from pure noise toward a clean colorization. "
-             "→ Recommended: 25 (default, good balance). "
-             "Use 12–15 for fast iteration when exploring parameters. "
-             "Use 50 for high-quality final exports on complex or detailed meshes. "
-             "Going above 50 rarely improves results further.")
-    rescale_t = gr.Slider(0.1, 5.0, value=1.0, step=0.05, label="Rescale T",
-        info="Warps the denoising time schedule. At 1.0 steps are evenly spaced "
-             "from t=1 (noise) to t=0 (output). Values > 1 compress more steps "
-             "near t=0, giving extra refinement passes at the end — useful when "
-             "part boundaries look fuzzy. Values < 1 do the opposite. "
-             "→ Recommended: 1.0 (default) for most cases. "
-             "Try 1.5–2.0 if color boundaries between parts are blurry. "
-             "Avoid going below 0.5 or above 3.0.")
-    guidance = gr.Slider(0.0, 10.0, value=default_guidance, step=0.1,
-        label="Guidance strength (CFG)",
-        info="Controls how strongly the model follows the conditioning signal "
-             "(rendered view for Full/Interactive, 2D map for Guided). "
-             "SegviGen uses CFG to align part colorization with the visible "
-             "structure of the object — higher values produce crisper but "
-             "potentially over-saturated part boundaries. "
-             "→ Recommended: 7.5 (default) for all three modes. "
-             "Lower to 4–6 if the model over-segments or produces noisy colors. "
-             "Raise to 9–10 if important parts are being merged together. "
-             "Interactive mode: 5–7 is often sufficient since click points "
-             "already constrain the target region.")
-    guidance_rescale = gr.Slider(0.0, 1.0, value=0.0, step=0.05,
-        label="Guidance rescale",
-        info="Corrects the variance of the CFG-guided output to match the "
-             "unguided output, preventing color over-saturation at high CFG. "
-             "→ Recommended: 0.0 (default, disabled) at CFG ≤ 7.5. "
-             "Enable with 0.5–0.7 if you raise CFG above 8 and the output "
-             "colors look washed-out or blown-out at part boundaries.")
-    gi_start = gr.Slider(0.0, 1.0, value=0.0, step=0.01,
-        label="Guidance interval — start",
-        info="CFG is only active while the denoising timestep t is between "
-             "[start, end]. Delaying the start lets the model freely establish "
-             "coarse part structure before guidance locks it in. "
-             "→ Recommended: 0.0 (default, guidance on from the very start). "
-             "Try 0.1–0.2 if the output has geometric artifacts on complex meshes "
-             "(e.g. thin features or many cavities).")
-    gi_end = gr.Slider(0.0, 1.0, value=1.0, step=0.01,
-        label="Guidance interval — end",
-        info="Upper bound of the guidance window. Ending before t=0 lets the "
-             "model freely refine fine details in the last steps without CFG "
-             "pressure, which can sharpen texture details within each part. "
-             "→ Recommended: 1.0 (default). "
-             "Try 0.8–0.9 together with start=0.1 for a 'soft guidance' approach "
-             "that reduces boundary fringing on high-detail models.")
+    """Render sampler + export parameter widgets inside an accordion."""
+    with gr.Accordion("Sampler & export parameters", open=False):
+        gr.Markdown("**Presets:**")
+        with gr.Row():
+            _sp_fast = gr.Button("⚡ Fast", size="sm")
+            _sp_bal  = gr.Button("⚖️ Balanced", size="sm", variant="primary")
+            _sp_qual = gr.Button("✨ Quality", size="sm")
 
-    gr.Markdown("#### Export parameters")
-    decimation = gr.Number(value=100000, label="Decimation target (faces)",
-        info="Target face count after QEM mesh simplification. The mesh is "
-             "decimated before texture baking, so this directly affects how "
-             "well part boundaries are preserved in the color texture. "
-             "→ Recommended: 100 000 (default) for general use. "
-             "Use 200 000–500 000 if you plan to split the result into parts — "
-             "more faces = sharper color boundaries = cleaner splits. "
-             "Use 20 000–50 000 for lightweight game-ready or real-time meshes.")
-    tex_size = gr.Dropdown([512, 1024, 2048, 4096], value=1024,
-        label="Texture size (px)",
-        info="Resolution of the square atlas texture baked onto the output mesh. "
-             "Since SegviGen encodes part labels as colors in the texture, "
-             "higher resolution means sharper, more accurate part boundaries. "
-             "→ Recommended: 2048 if you intend to split the mesh into parts "
-             "(color precision at boundaries matters). "
-             "1024 (default) for general viewing. "
-             "4096 for hero assets with many fine parts. "
-             "512 for fast iteration or mobile targets.")
-    remesh = gr.Checkbox(value=True, label="Remesh",
-        info="Runs isotropic remeshing before texture baking to produce uniform "
-             "triangle sizes. Uniform topology improves how cleanly the "
-             "part-color texture projects onto the mesh. "
-             "→ Recommended: enabled (default) for most workflows. "
-             "Disable if you need to preserve the exact original mesh topology "
-             "for rigging, morph targets, or downstream tools that are "
-             "sensitive to vertex ordering.")
-    remesh_band = gr.Slider(0, 4, value=1, step=1, label="Remesh band",
-        info="Spatial scale of the remeshing grid: 0 = finest triangles, "
-             "4 = coarsest. Lower values preserve small geometric features "
-             "at the cost of more triangles before decimation. "
-             "→ Recommended: 1 (default) for a light pass that keeps most "
-             "surface detail. Use 0 for highly detailed models (characters, "
-             "mechanical parts). Use 2–3 for smooth organic shapes where "
-             "fine topology is less important.")
-    remesh_proj = gr.Slider(0, 4, value=0, step=1, label="Remesh project",
-        info="Projection iterations that snap the remeshed surface back onto "
-             "the original mesh geometry after remeshing. More iterations = "
-             "tighter geometric fit but slower processing. "
-             "→ Recommended: 0 (default) for speed with minimal surface drift. "
-             "Use 1–2 when shape accuracy matters (e.g. mechanical parts, "
-             "tight-fitting joints). Use 3–4 for highly curved organic shapes "
-             "where remeshing tends to round off sharp features.")
+        gr.Markdown("##### Sampler")
+        steps = gr.Slider(1, 100, value=default_steps, step=1, label="Steps",
+            info="How many denoising passes the model runs. "
+                 "More = better quality, slower. → Fast: 12 · Balanced: 25 · Quality: 50")
+        rescale_t = gr.Slider(0.1, 5.0, value=1.0, step=0.05, label="Rescale T",
+            info="Warps the denoising schedule. >1 spends more steps on fine detail at the end. "
+                 "→ Keep at 1.0. Try 1.5–2.0 if part boundaries look blurry.")
+        guidance = gr.Slider(0.0, 10.0, value=default_guidance, step=0.1,
+            label="Guidance strength (CFG)",
+            info="How strictly the model follows the input image. Higher = crisper parts, "
+                 "but can over-saturate. → 7.5 default. Lower to 4–6 if over-segmenting. "
+                 "Raise to 9–10 if parts are merging. Use 5–7 for Interactive mode.")
+        guidance_rescale = gr.Slider(0.0, 1.0, value=0.0, step=0.05,
+            label="Guidance rescale",
+            info="Prevents color blowout when CFG is high. "
+                 "→ Keep at 0. Enable (0.5–0.7) only if colors look washed out at CFG > 8.")
+        gi_start = gr.Slider(0.0, 1.0, value=0.0, step=0.01,
+            label="Guidance interval — start",
+            info="CFG only applies between [start, end] of the denoising trajectory. "
+                 "→ Keep at 0.0. Try 0.1 if artifacts appear on complex geometry.")
+        gi_end = gr.Slider(0.0, 1.0, value=1.0, step=0.01,
+            label="Guidance interval — end",
+            info="Upper bound of the CFG window. "
+                 "→ Keep at 1.0. Try 0.9 together with start=0.1 for softer boundaries.")
+
+        gr.Markdown("##### Export")
+        decimation = gr.Number(value=100000, label="Decimation target (faces)",
+            info="Max faces in the output mesh after simplification. "
+                 "→ 100k default · 300k+ if you plan to split into parts · 30–50k for lightweight")
+        tex_size = gr.Dropdown([512, 1024, 2048, 4096], value=1024,
+            label="Texture size (px)",
+            info="Resolution of the baked texture. Higher = sharper part color boundaries. "
+                 "→ 1024 default · 2048 if splitting · 4096 for hero assets · 512 for quick tests")
+        remesh = gr.Checkbox(value=True, label="Remesh",
+            info="Rebalances triangle sizes before baking, improving texture quality. "
+                 "→ Keep on. Disable only if preserving exact mesh topology for rigging.")
+        remesh_band = gr.Slider(0, 4, value=1, step=1, label="Remesh band",
+            info="Remesh coarseness: 0 = finest, 4 = coarsest. "
+                 "→ 1 default · 0 for detailed models · 2–3 for smooth organic shapes")
+        remesh_proj = gr.Slider(0, 4, value=0, step=1, label="Remesh project",
+            info="Snaps the remeshed surface back onto the original shape. "
+                 "→ 0 default · 1–2 for mechanical parts · 3–4 for curved organic shapes")
+
+    _sp_outs = [steps, rescale_t, guidance, guidance_rescale, gi_start, gi_end,
+                decimation, tex_size, remesh, remesh_band, remesh_proj]
+    _sp_fast.click(fn=lambda: _sampler_preset_vals("fast"),     outputs=_sp_outs)
+    _sp_bal .click(fn=lambda: _sampler_preset_vals("balanced"), outputs=_sp_outs)
+    _sp_qual.click(fn=lambda: _sampler_preset_vals("quality"),  outputs=_sp_outs)
 
     return dict(
         steps=steps, rescale_t=rescale_t, guidance=guidance,
@@ -1132,16 +1093,8 @@ with gr.Blocks(title="SegviGen — 3D Part Segmentation") as demo:
         "Upload a 3D model (GLB), choose a segmentation method, tune the parameters, and run inference."
     )
 
-    with gr.Row():
-        # ── Left column: input ──────────────────────────────────────────────
-        with gr.Column(scale=1):
-            gr.Markdown("## Input Model")
-            input_model = gr.Model3D(label="Upload GLB / OBJ / PLY", clear_color=[0.1, 0.1, 0.15, 1])
-
-        # ── Right column: output ────────────────────────────────────────────
-        with gr.Column(scale=1):
-            gr.Markdown("## Output Model")
-            output_model = gr.Model3D(label="Segmented Output", clear_color=[0.1, 0.1, 0.15, 1])
+    gr.Markdown("## Input Model")
+    input_model = gr.Model3D(label="Upload GLB / OBJ / PLY", clear_color=[0.1, 0.1, 0.15, 1])
 
     # ── Method tabs ──────────────────────────────────────────────────────────
     with gr.Tabs():
@@ -1155,33 +1108,35 @@ with gr.Blocks(title="SegviGen — 3D Part Segmentation") as demo:
                 "Specify 3-D voxel coordinates (in the 0–511 grid) of the part you want to isolate."
             )
             with gr.Row():
-                with gr.Column():
-                    i_ckpt = gr.Textbox(label="Checkpoint path (.ckpt)", value=DEFAULT_CKPT_INTER, placeholder="path/to/interactive_seg.ckpt")
-                    i_transforms = gr.Textbox(label="Transforms JSON", value=DEFAULT_TRANSFORMS,
-                                              placeholder="data_toolkit/transforms.json")
-                    i_rendered_img = gr.Image(label="Override rendered image (optional, PNG)",
-                                              type="filepath", value=None)
-                    i_points = gr.Textbox(
-                        label="Voxel click points  (x y z per point, space-separated; up to 10 points)",
-                        placeholder="388 448 392   256 256 256",
-                        value="388 448 392",
-                    )
+                i_ckpt = gr.Textbox(label="Checkpoint path (.ckpt)", value=DEFAULT_CKPT_INTER, placeholder="path/to/interactive_seg.ckpt")
+                i_transforms = gr.Textbox(label="Transforms JSON", value=DEFAULT_TRANSFORMS,
+                                          placeholder="data_toolkit/transforms.json")
+                i_rendered_img = gr.Image(label="Override rendered image (optional, PNG)",
+                                          type="filepath", value=None)
+                i_points = gr.Textbox(
+                    label="Voxel click points  (x y z per point, space-separated; up to 10 points)",
+                    placeholder="388 448 392   256 256 256",
+                    value="388 448 392",
+                )
 
+            i_run = gr.Button("Run Interactive Segmentation", variant="primary")
+
+            # ── Viewers ──────────────────────────────────────────────────────
+            with gr.Row():
+                i_seg_model   = gr.Model3D(label="Segmented Output",   clear_color=[0.1, 0.1, 0.15, 1])
+                i_parts_model = gr.Model3D(label="Split Parts Output", clear_color=[0.1, 0.1, 0.15, 1])
+
+            # ── Parameters (side by side) ─────────────────────────────────
+            with gr.Row():
                 with gr.Column():
                     _i = _make_sampler_export_controls()
                     i_steps, i_rescale_t, i_guidance, i_guidance_rescale, i_gi_start, i_gi_end = (
                         _i["steps"], _i["rescale_t"], _i["guidance"], _i["guidance_rescale"], _i["gi_start"], _i["gi_end"])
                     i_decimation, i_tex_size, i_remesh, i_remesh_band, i_remesh_proj = (
                         _i["decimation"], _i["tex_size"], _i["remesh"], _i["remesh_band"], _i["remesh_proj"])
-
-            i_run = gr.Button("Run Interactive Segmentation", variant="primary")
-
-            with gr.Row():
                 with gr.Column():
                     i_split_ctrl = _make_split_controls("i")
                     i_split_btn = gr.Button("Split into Parts", variant="secondary")
-                with gr.Column():
-                    i_parts_model = gr.Model3D(label="Split Parts Output", clear_color=[0.1, 0.1, 0.15, 1])
 
             i_seg_state = gr.State(None)
 
@@ -1198,7 +1153,7 @@ with gr.Blocks(title="SegviGen — 3D Part Segmentation") as demo:
                     i_gi_start, i_gi_end,
                     i_decimation, i_tex_size, i_remesh, i_remesh_band, i_remesh_proj,
                 ],
-                outputs=[output_model, i_seg_state],
+                outputs=[i_seg_model, i_seg_state],
             )
 
             i_split_btn.click(
@@ -1216,28 +1171,30 @@ with gr.Blocks(title="SegviGen — 3D Part Segmentation") as demo:
                 "The model segments all parts simultaneously, conditioned on a rendered view of the input model."
             )
             with gr.Row():
-                with gr.Column():
-                    f_ckpt = gr.Textbox(label="Checkpoint path (.ckpt)", value=DEFAULT_CKPT_FULL, placeholder="path/to/full_seg.ckpt")
-                    f_transforms = gr.Textbox(label="Transforms JSON", value=DEFAULT_TRANSFORMS,
-                                              placeholder="data_toolkit/transforms.json")
-                    f_rendered_img = gr.Image(label="Override rendered image (optional, PNG)",
-                                             type="filepath", value=None)
+                f_ckpt = gr.Textbox(label="Checkpoint path (.ckpt)", value=DEFAULT_CKPT_FULL, placeholder="path/to/full_seg.ckpt")
+                f_transforms = gr.Textbox(label="Transforms JSON", value=DEFAULT_TRANSFORMS,
+                                          placeholder="data_toolkit/transforms.json")
+                f_rendered_img = gr.Image(label="Override rendered image (optional, PNG)",
+                                         type="filepath", value=None)
 
+            f_run = gr.Button("Run Full Segmentation", variant="primary")
+
+            # ── Viewers ──────────────────────────────────────────────────────
+            with gr.Row():
+                f_seg_model   = gr.Model3D(label="Segmented Output",   clear_color=[0.1, 0.1, 0.15, 1])
+                f_parts_model = gr.Model3D(label="Split Parts Output", clear_color=[0.1, 0.1, 0.15, 1])
+
+            # ── Parameters (side by side) ─────────────────────────────────
+            with gr.Row():
                 with gr.Column():
                     _f = _make_sampler_export_controls()
                     f_steps, f_rescale_t, f_guidance, f_guidance_rescale, f_gi_start, f_gi_end = (
                         _f["steps"], _f["rescale_t"], _f["guidance"], _f["guidance_rescale"], _f["gi_start"], _f["gi_end"])
                     f_decimation, f_tex_size, f_remesh, f_remesh_band, f_remesh_proj = (
                         _f["decimation"], _f["tex_size"], _f["remesh"], _f["remesh_band"], _f["remesh_proj"])
-
-            f_run = gr.Button("Run Full Segmentation", variant="primary")
-
-            with gr.Row():
                 with gr.Column():
                     f_split_ctrl = _make_split_controls("f")
                     f_split_btn = gr.Button("Split into Parts", variant="secondary")
-                with gr.Column():
-                    f_parts_model = gr.Model3D(label="Split Parts Output", clear_color=[0.1, 0.1, 0.15, 1])
 
             f_seg_state = gr.State(None)
 
@@ -1253,7 +1210,7 @@ with gr.Blocks(title="SegviGen — 3D Part Segmentation") as demo:
                     f_gi_start, f_gi_end,
                     f_decimation, f_tex_size, f_remesh, f_remesh_band, f_remesh_proj,
                 ],
-                outputs=[output_model, f_seg_state],
+                outputs=[f_seg_model, f_seg_state],
             )
 
             f_split_btn.click(
@@ -1271,27 +1228,29 @@ with gr.Blocks(title="SegviGen — 3D Part Segmentation") as demo:
                 "Upload a 2D semantic map image (different solid colors per part) to control segmentation granularity."
             )
             with gr.Row():
-                with gr.Column():
-                    t_ckpt = gr.Textbox(label="Checkpoint path (.ckpt)",
-                                        value=DEFAULT_CKPT_FULL_2D, placeholder="path/to/full_seg_w_2d_map.ckpt")
-                    t_guidance_img = gr.Image(label="2D Guidance Map (PNG — unique color per part)",
-                                              type="filepath")
+                t_ckpt = gr.Textbox(label="Checkpoint path (.ckpt)",
+                                    value=DEFAULT_CKPT_FULL_2D, placeholder="path/to/full_seg_w_2d_map.ckpt")
+                t_guidance_img = gr.Image(label="2D Guidance Map (PNG — unique color per part)",
+                                          type="filepath")
 
+            t_run = gr.Button("Run 2D-Guided Segmentation", variant="primary")
+
+            # ── Viewers ──────────────────────────────────────────────────────
+            with gr.Row():
+                t_seg_model   = gr.Model3D(label="Segmented Output",   clear_color=[0.1, 0.1, 0.15, 1])
+                t_parts_model = gr.Model3D(label="Split Parts Output", clear_color=[0.1, 0.1, 0.15, 1])
+
+            # ── Parameters (side by side) ─────────────────────────────────
+            with gr.Row():
                 with gr.Column():
                     _t = _make_sampler_export_controls()
                     t_steps, t_rescale_t, t_guidance, t_guidance_rescale, t_gi_start, t_gi_end = (
                         _t["steps"], _t["rescale_t"], _t["guidance"], _t["guidance_rescale"], _t["gi_start"], _t["gi_end"])
                     t_decimation, t_tex_size, t_remesh, t_remesh_band, t_remesh_proj = (
                         _t["decimation"], _t["tex_size"], _t["remesh"], _t["remesh_band"], _t["remesh_proj"])
-
-            t_run = gr.Button("Run 2D-Guided Segmentation", variant="primary")
-
-            with gr.Row():
                 with gr.Column():
                     t_split_ctrl = _make_split_controls("t")
                     t_split_btn = gr.Button("Split into Parts", variant="secondary")
-                with gr.Column():
-                    t_parts_model = gr.Model3D(label="Split Parts Output", clear_color=[0.1, 0.1, 0.15, 1])
 
             t_seg_state = gr.State(None)
 
@@ -1307,7 +1266,7 @@ with gr.Blocks(title="SegviGen — 3D Part Segmentation") as demo:
                     t_gi_start, t_gi_end,
                     t_decimation, t_tex_size, t_remesh, t_remesh_band, t_remesh_proj,
                 ],
-                outputs=[output_model, t_seg_state],
+                outputs=[t_seg_model, t_seg_state],
             )
 
             t_split_btn.click(
