@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2d3248; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #4a5268; }
+}
+
+@layer utilities {
+  .animate-fade-in { animation: fadeIn 0.18s ease; }
+}
