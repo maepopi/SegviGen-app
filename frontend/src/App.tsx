@@ -3,24 +3,22 @@ import { uploadFile } from './api/client'
 import { InteractiveTab } from './components/tabs/InteractiveTab'
 import { FullTab }        from './components/tabs/FullTab'
 import { Full2DTab }      from './components/tabs/Full2DTab'
-import { GuidanceTab }    from './components/tabs/GuidanceTab'
-import { Upload, Layers, Grid2x2, Wand2, Map } from 'lucide-react'
+import { Viewer3D }       from './components/Viewer3D'
+import { Upload, Layers, Grid2x2, Wand2 } from 'lucide-react'
 
-type TabId = 'interactive' | 'full' | 'full2d' | 'guidance'
+type TabId = 'interactive' | 'full' | 'full2d'
 
-const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode; short: string }> = [
-  { id: 'interactive', label: 'Interactive',      icon: <Layers size={15} />,  short: 'Interactive' },
-  { id: 'full',        label: 'Full',             icon: <Grid2x2 size={15} />, short: 'Full' },
-  { id: 'full2d',      label: 'Full + 2D Map',    icon: <Wand2 size={15} />,   short: 'Full + 2D' },
-  { id: 'guidance',    label: 'Prepare 2D Map',   icon: <Map size={15} />,     short: 'Prepare Map' },
+const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
+  { id: 'interactive', label: 'Interactive',       icon: <Layers size={15} /> },
+  { id: 'full',        label: 'Full',              icon: <Grid2x2 size={15} /> },
+  { id: 'full2d',      label: 'Full + 2D Map',     icon: <Wand2 size={15} /> },
 ]
 
 export default function App() {
-  const [activeTab,      setActiveTab]      = useState<TabId>('interactive')
-  const [uploadedPath,   setUploadedPath]   = useState<string | null>(null)
-  const [uploadedName,   setUploadedName]   = useState<string | null>(null)
-  const [dragOver,       setDragOver]       = useState(false)
-  const [guidancePath,   setGuidancePath]   = useState<string | null>(null)
+  const [activeTab,    setActiveTab]    = useState<TabId>('interactive')
+  const [uploadedPath, setUploadedPath] = useState<string | null>(null)
+  const [uploadedName, setUploadedName] = useState<string | null>(null)
+  const [dragOver,     setDragOver]     = useState(false)
 
   const handleUpload = useCallback(async (file: File) => {
     setUploadedName('Uploading…')
@@ -40,16 +38,11 @@ export default function App() {
     if (file) handleUpload(file)
   }, [handleUpload])
 
-  function useAsGuidance(path: string) {
-    setGuidancePath(path)
-    setActiveTab('full2d')
-  }
-
   return (
     <div className="flex flex-col h-full bg-bg">
 
       {/* ── Header ── */}
-      <header className="flex items-center gap-3 px-5 h-13 border-b border-border bg-bg/90 backdrop-blur-sm sticky top-0 z-50 shrink-0"
+      <header className="flex items-center gap-3 px-5 border-b border-border bg-bg/90 backdrop-blur-sm sticky top-0 z-50 shrink-0"
         style={{ height: '52px' }}>
         <span className="text-accent font-bold text-lg tracking-tight">SegviGen</span>
         <span className="text-dim text-xs">3D Part Segmentation</span>
@@ -58,7 +51,7 @@ export default function App() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* ── Sidebar ── */}
-        <aside className="w-52 shrink-0 bg-card border-r border-border flex flex-col gap-4 p-3 overflow-y-auto">
+        <aside className="w-64 shrink-0 bg-card border-r border-border flex flex-col gap-4 p-3 overflow-y-auto">
 
           {/* Upload */}
           <div>
@@ -67,15 +60,19 @@ export default function App() {
               onDragOver={e => { e.preventDefault(); setDragOver(true) }}
               onDragLeave={() => setDragOver(false)}
               onDrop={onDrop}
-              className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl p-4 cursor-pointer transition-all
+              className={`flex items-center gap-3 border-2 border-dashed rounded-xl px-3 py-2 cursor-pointer transition-all
                 ${dragOver ? 'border-accent bg-accent/10' : 'border-border hover:border-accent/50 hover:bg-hover'}`}
             >
               <input type="file" accept=".glb,.obj,.ply" className="hidden" onChange={onFileChange} />
-              <Upload size={20} className="text-muted" />
-              <p className="text-xs text-muted text-center leading-tight">
-                {uploadedName ?? 'Drop GLB / OBJ / PLY\nor click to browse'}
+              <Upload size={16} className="text-muted shrink-0" />
+              <p className="text-xs text-muted leading-tight truncate">
+                {uploadedName ?? 'Drop GLB / OBJ / PLY'}
               </p>
             </label>
+
+            <div className="mt-2 rounded-xl overflow-hidden border border-border" style={{ height: '200px' }}>
+              <Viewer3D filePath={uploadedPath} compact />
+            </div>
           </div>
 
           {/* Nav */}
@@ -92,7 +89,7 @@ export default function App() {
                       : 'text-muted hover:bg-hover hover:text-white'}`}
                 >
                   {tab.icon}
-                  {tab.short}
+                  {tab.label}
                 </button>
               ))}
             </nav>
@@ -108,8 +105,7 @@ export default function App() {
         <main className="flex-1 overflow-y-auto p-6">
           {activeTab === 'interactive' && <InteractiveTab glbPath={uploadedPath} />}
           {activeTab === 'full'        && <FullTab        glbPath={uploadedPath} />}
-          {activeTab === 'full2d'      && <Full2DTab      glbPath={uploadedPath} initialGuidancePath={guidancePath} />}
-          {activeTab === 'guidance'    && <GuidanceTab    glbPath={uploadedPath} onUseAsGuidance={useAsGuidance} />}
+          {activeTab === 'full2d'      && <Full2DTab      glbPath={uploadedPath} />}
         </main>
       </div>
     </div>

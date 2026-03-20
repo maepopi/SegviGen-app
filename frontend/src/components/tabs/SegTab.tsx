@@ -14,8 +14,8 @@ import type { SamplerParams } from '../SamplerFields'
 import type { SplitParams } from '../SplitFields'
 
 interface Props {
-  title: string
-  description: string
+  title?: string
+  description?: string
   runEndpoint: string
   buildParams: (sampler: SamplerParams) => Record<string, unknown>
   extraInputs: React.ReactNode
@@ -45,20 +45,31 @@ export function SegTab({ title, description, runEndpoint, buildParams, extraInpu
   return (
     <div className="flex flex-col gap-5 animate-fade-in">
       {/* Header */}
-      <div>
-        <h2 className="text-xl font-bold mb-1">{title}</h2>
-        <p className="text-sm text-muted">{description}</p>
-      </div>
+      {(title || description) && (
+        <div>
+          {title && <h2 className="text-xl font-bold mb-1">{title}</h2>}
+          {description && <p className="text-sm text-muted">{description}</p>}
+        </div>
+      )}
 
       {/* Inputs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {extraInputs}
       </div>
 
-      {/* Run */}
-      <div className="flex items-center gap-3">
+      {/* Run + Split */}
+      <div className="flex items-center gap-3 flex-wrap">
         <Btn onClick={handleRun} disabled={segJob.status === 'running'}>{runLabel}</Btn>
         <StatusBadge status={segJob.status} error={segJob.error} />
+        <div className="w-px h-5 bg-border mx-1" />
+        <Btn
+          variant="secondary"
+          onClick={handleSplit}
+          disabled={!segJob.result || splitJob.status === 'running'}
+        >
+          Split into Parts
+        </Btn>
+        <StatusBadge status={splitJob.status} error={splitJob.error} />
       </div>
 
       {/* Viewers — always visible */}
@@ -74,16 +85,6 @@ export function SegTab({ title, description, runEndpoint, buildParams, extraInpu
         </Accordion>
         <Accordion title="Split Parameters">
           <SplitFields value={split} onChange={setSplit} presets={presets?.split} />
-          <div className="mt-3 flex items-center gap-3">
-            <Btn
-              variant="secondary"
-              onClick={handleSplit}
-              disabled={!segJob.result || splitJob.status === 'running'}
-            >
-              Split into Parts
-            </Btn>
-            <StatusBadge status={splitJob.status} error={splitJob.error} />
-          </div>
         </Accordion>
       </div>
     </div>

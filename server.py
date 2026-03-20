@@ -25,7 +25,10 @@ import guidance_map as gmap
 app = FastAPI(title="SegviGen")
 
 _STATIC_DIR = Path(__file__).parent / "static"
-app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+# Serve /assets/* directly (Vite output references /assets/... not /static/assets/...)
+_ASSETS_DIR = _STATIC_DIR / "assets"
+if _ASSETS_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(_ASSETS_DIR)), name="assets")
 
 # ─── Job store ─────────────────────────────────────────────────────────────────
 # Simple in-memory job dict — good enough for local single-user tool.
