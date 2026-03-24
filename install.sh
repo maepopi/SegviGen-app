@@ -5,12 +5,12 @@
 # What this does:
 #   1. Clones TRELLIS.2 (Microsoft) and builds its CUDA extensions
 #      (o_voxel, cumesh, flex_gemm, flash-attn, nvdiffrast, nvdiffrec)
-#      inside a new conda env "trellis2" (Python 3.10).
+#      inside a new conda env "segvigen" (Python 3.11).
 #   2. Installs SegviGen-specific packages into that env.
 #   3. Creates the ckpt/ directory.
 #
 # After running, activate the env and launch:
-#   conda activate trellis2
+#   conda activate segvigen
 #   python app.py
 #
 # Checkpoints must be downloaded separately from:
@@ -36,23 +36,29 @@ fi
 # We create the conda env manually so we can pin torch > 2.7.1 (cu128 wheels).
 # TRELLIS.2's --new-env installs torch==2.6.0 which we skip by omitting it.
 # This step takes 30–60 minutes depending on your CPU.
-echo "[2/5] Creating conda env 'trellis2' with Python 3.10 …"
+echo "[2/5] Creating conda env 'segvigen' with Python 3.11 …"
 eval "$(conda shell.bash hook)"
 
 # Remove stale env if present so we get a clean slate
-conda env remove -n trellis2 -y 2>/dev/null || true
+conda env remove -n segvigen -y 2>/dev/null || true
 
-conda create -n trellis2 python=3.10 -y
-conda activate trellis2
+conda create -n segvigen python=3.11 -y
+conda activate segvigen
+echo "[2/5] conda env active: $(which python)"
 
 echo "[2/5] Installing PyTorch > 2.7.1 (cu128) …"
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 
 echo "[2/5] Building TRELLIS.2 CUDA extensions (30–60 min) …"
 cd TRELLIS.2
-# --new-env is intentionally omitted — env + torch already installed above
-bash setup.sh --basic --flash-attn --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm
+# --new-env is intentionally omitted — env + torch already installed above.
+bash setup.sh --basic --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm
 cd "$SCRIPT_DIR"
+
+# echo "[2/5] Installing flash-attn (Blackwell sm_120 support) …"
+# # --no-build-isolation makes the already-installed torch visible to setup.py.
+# # MAX_JOBS=4 limits parallel C++ compilation to avoid OOM on the build machine.
+# MAX_JOBS=4 pip install flash-attn --no-build-isolation
 
 # ─── 3. Install SegviGen deps (env already active) ───────────────────────────
 echo "[3/5] Installing SegviGen dependencies …"
@@ -62,8 +68,11 @@ pip uninstall trellis2 -y 2>/dev/null || true
 find "$(python -c "import site; print('\n'.join(site.getsitepackages()))")" \
     -name "trellis2.pth" -delete 2>/dev/null || true
 
-# mathutils 5.1.0 uses PyLong_AsInt (Python 3.12+) and _PyArg_CheckPositional
-# (removed in 3.13) — neither compiles cleanly on Python 3.10 without patching.
+# mathutils requires libeigen3-dev to compile — install it now (before the build).
+sudo apt-get install -y libeigen3-dev
+
+# mathutils 5.1.0 uses PyLong_AsInt (added in Python 3.12, absent in 3.10/3.11)
+# and re-declares _PyArg_CheckPositional (removed in 3.13) — both require patching.
 pip download mathutils==5.1.0 --no-deps -d /tmp/mathutils_src/
 cd /tmp && tar -xzf mathutils_src/mathutils-5.1.0.tar.gz && cd mathutils-5.1.0
 # Patch 1: PyLong_AsInt → (int)PyLong_AsLong
@@ -80,12 +89,17 @@ cd "$SCRIPT_DIR"
 
 pip install "transformers==4.57.6"
 
-# bpy: 4.0.0 is the latest available wheel (4.1.0 does not exist on PyPI).
-# Note: bpy has no Python 3.12 wheels — requires Python 3.10 or 3.11.
-pip install bpy==4.0.0 --extra-index-url https://download.blender.org/pypi/
+# bpy: 4.1.0 is the lowest available wheel on https://download.blender.org/pypi/.
+# Requires Python 3.10 or 3.11.
+pip install bpy==4.1.0 --extra-index-url https://download.blender.org/pypi/
 
 pip install "gradio==6.0.1"
-pip install --upgrade Pillow
+# TRELLIS.2 setup.sh (--basic) installs pillow-simd which conflicts with Pillow.
+# Uninstall it first so our pin takes sole ownership of the PIL namespace.
+pip uninstall pillow-simd -y 2>/dev/null || true
+# gradio 6.0.1 requires PIL._webp.HAVE_WEBPANIM which was removed in Pillow 11.
+# This must be the last pip install so nothing can upgrade it back.
+pip install "Pillow>=10.0.0,<11.0.0"
 
 # ─── 4. System libraries for OpenCV / OpenEXR ────────────────────────────────
 echo "[4/5] Installing system libraries (needs sudo) …"
@@ -103,29 +117,36 @@ EOF
 
 mkdir -p "$SCRIPT_DIR/ckpt"
 
+# ─── 6. Download checkpoints (skip files that already exist) ─────────────────
+CKPT_FILES=("interactive_seg.ckpt" "full_seg.ckpt" "full_seg_w_2d_map.ckpt")
+MISSING=()
+for f in "${CKPT_FILES[@]}"; do
+    [[ ! -f "$SCRIPT_DIR/ckpt/$f" ]] && MISSING+=("$f")
+done
+
+if [[ ${#MISSING[@]} -eq 0 ]]; then
+    echo "[6/6] All checkpoints already present — skipping download."
+else
+    echo "[6/6] Downloading ${#MISSING[@]} missing checkpoint(s) from HuggingFace …"
+    pip install -q huggingface_hub
+    python - "$SCRIPT_DIR/ckpt" "${MISSING[@]}" <<'PYEOF'
+import shutil, os, sys
+from huggingface_hub import hf_hub_download
+ckpt_dir, *files = sys.argv[1:]
+for f in files:
+    dest = os.path.join(ckpt_dir, f)
+    print(f"  Downloading {f} …", flush=True)
+    path = hf_hub_download("fenghora/SegviGen", f)
+    shutil.copy(path, dest)
+    print(f"  Saved → {dest}", flush=True)
+PYEOF
+fi
+
 echo ""
 echo "=== Installation complete ==="
 echo ""
-echo "Download checkpoints from https://huggingface.co/fenghora/SegviGen"
-echo "and place them in:  $SCRIPT_DIR/ckpt/"
-echo "  interactive_seg.ckpt"
-echo "  full_seg.ckpt"
-echo "  full_seg_w_2d_map.ckpt"
-echo ""
-echo "You can download them with:"
-echo "  conda activate trellis2"
-echo "  pip install huggingface_hub"
-echo "  python -c \""
-echo "    from huggingface_hub import hf_hub_download"
-echo "    import shutil, os"
-echo "    ckpt_dir = '$SCRIPT_DIR/ckpt'"
-echo "    for f in ['interactive_seg.ckpt', 'full_seg.ckpt', 'full_seg_w_2d_map.ckpt']:"
-echo "        path = hf_hub_download('fenghora/SegviGen', f)"
-echo "        shutil.copy(path, os.path.join(ckpt_dir, f))"
-echo "  \""
-echo ""
 echo "Then launch:"
-echo "  conda activate trellis2"
+echo "  conda activate segvigen"
 echo "  cd $SCRIPT_DIR"
 echo "  python app.py"
 echo "  # → http://localhost:7860"

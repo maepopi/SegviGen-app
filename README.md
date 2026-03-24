@@ -54,22 +54,49 @@ FastAPI :7860
 ### Prerequisites
 - **System**: Linux
 - **GPU**: NVIDIA GPU with at least 12 GB VRAM
-- **Python**: 3.10 (3.12 not supported — `bpy` 4.x has no wheels for it)
+- **Python**: 3.11 (managed by the install script — do not use 3.12+)
+- **CUDA**: 12.x
+- **Conda**: miniconda or anaconda
 - **Node.js**: 18+ (for frontend development only)
 
-### 1. Set up the Python environment
+### 1. Run the install script
 
-Follow the standard SegviGen installation (see below), then install additional dependencies:
+The script handles everything: creates a `segvigen` conda env (Python 3.11), builds all TRELLIS.2 CUDA extensions, installs all dependencies, and downloads missing checkpoints automatically.
 
 ```sh
-pip install fastapi uvicorn[standard] python-multipart
-pip install bpy==4.0.0 --extra-index-url https://download.blender.org/pypi/
-pip install google-genai   # for Pixmesh guidance map generation
+bash install.sh
 ```
 
-> **`mathutils` build failure on Python 3.10** — see the patch instructions in the Installation section below.
+> **What the script does, step by step:**
+> 1. Clones TRELLIS.2 (skips if already present)
+> 2. Creates conda env `segvigen` with Python 3.11, installs PyTorch cu128
+> 3. Builds TRELLIS.2 CUDA extensions (`o_voxel`, `cumesh`, `flex_gemm`, `nvdiffrast`, `nvdiffrec`) — takes 30–60 min
+> 4. Installs SegviGen Python deps (including patched `mathutils`, `bpy 4.0.0`, `gradio 6.0.1`, `Pillow 10.x`)
+> 5. Installs system libs (`libsm6`, `libopenexr-dev`, etc.)
+> 6. Downloads any missing checkpoints from [HuggingFace](https://huggingface.co/fenghora/SegviGen) into `ckpt/`
+
+> **Note on `mathutils`:** The install script automatically patches `mathutils 5.1.0` source to compile on Python 3.11 (fixes `PyLong_AsInt` and `_PyArg_CheckPositional` compatibility issues).
+
+> **Note on Pillow:** `gradio 6.0.1` requires `Pillow < 11` (`HAVE_WEBPANIM` was removed in Pillow 11). The script pins `Pillow>=10,<11` and removes `pillow-simd` if installed by TRELLIS.2.
 
 ### 2. Place checkpoints
+
+Checkpoints are downloaded automatically by `install.sh`. If you need to download them manually:
+
+```sh
+conda activate segvigen
+pip install huggingface_hub
+python -c "
+from huggingface_hub import hf_hub_download
+import shutil, os
+ckpt_dir = 'ckpt'
+os.makedirs(ckpt_dir, exist_ok=True)
+for f in ['interactive_seg.ckpt', 'full_seg.ckpt', 'full_seg_w_2d_map.ckpt']:
+    shutil.copy(hf_hub_download('fenghora/SegviGen', f), os.path.join(ckpt_dir, f))
+"
+```
+
+Expected layout:
 
 ```
 ckpt/
@@ -77,8 +104,6 @@ ckpt/
 ├── full_seg.ckpt             ← Full Segmentation
 └── full_seg_w_2d_map.ckpt    ← Full Segmentation + 2D Guidance
 ```
-
-Checkpoints are available on [Hugging Face](https://huggingface.co/fenghora/SegviGen).
 
 ### 3. (Optional) Build the frontend
 
@@ -97,7 +122,7 @@ npm run build   # outputs to ../static/
 ### Starting the server
 
 ```sh
-conda activate trellis2   # or your Python 3.10 env
+conda activate segvigen   # Python 3.11 env created by install.sh
 uvicorn server:app --host 0.0.0.0 --port 7860
 # → Open http://localhost:7860
 ```
@@ -108,6 +133,7 @@ Run both processes in separate terminals:
 
 ```sh
 # Terminal 1 — backend
+conda activate segvigen
 uvicorn server:app --host 0.0.0.0 --port 7860 --reload
 
 # Terminal 2 — frontend dev server
