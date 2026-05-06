@@ -13,6 +13,7 @@ export interface SamplerPreset {
   remesh: boolean
   remesh_band: number
   remesh_project: number
+  remesh_method: 'pymeshlab' | 'ovoxel'
 }
 
 export interface SplitPreset {

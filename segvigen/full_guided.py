@@ -19,6 +19,7 @@ import os
 import tempfile
 import threading
 from pathlib import Path
+from typing import Literal
 
 import torch
 from PIL import Image
@@ -101,6 +102,7 @@ class FullGuidedSegmenter:
         remesh: bool = True,
         remesh_band: int = 1,
         remesh_project: int = 0,
+        remesh_method: Literal["pymeshlab", "ovoxel"] = "pymeshlab",
     ) -> str:
         """Run full segmentation conditioned on a 2D flat-color guidance map.
 
@@ -178,7 +180,8 @@ class FullGuidedSegmenter:
                                    texture_size=int(texture_size),
                                    remesh=remesh,
                                    remesh_band=remesh_band,
-                                   remesh_project=remesh_project)
+                                   remesh_project=remesh_project,
+                                   remesh_method=remesh_method)
                 glb.export(out_path)
                 return out_path
             finally:

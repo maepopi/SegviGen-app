@@ -16,7 +16,7 @@ import os
 import tempfile
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import torch
 from PIL import Image
@@ -100,6 +100,7 @@ class FullSegmenter:
         remesh: bool = True,
         remesh_band: int = 1,
         remesh_project: int = 0,
+        remesh_method: Literal["pymeshlab", "ovoxel"] = "pymeshlab",
     ) -> str:
         """Run full segmentation on a GLB mesh.
 
@@ -192,7 +193,8 @@ class FullSegmenter:
                                    texture_size=int(texture_size),
                                    remesh=remesh,
                                    remesh_band=remesh_band,
-                                   remesh_project=remesh_project)
+                                   remesh_project=remesh_project,
+                                   remesh_method=remesh_method)
                 glb.export(out_path)
                 return out_path
             finally:

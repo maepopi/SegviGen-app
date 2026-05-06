@@ -100,32 +100,45 @@ def _load_glb_json_and_bin(glb_path: str) -> Tuple[dict, bytes]:
     return json.loads(gltf_json), bin_chunk
 
 
-def _extract_basecolor_texture_image(glb_path: str, debug_print: bool = False) -> np.ndarray:
+def _extract_basecolor_texture_image(
+    glb_path: str, 
+    debug_print: bool = False
+) -> np.ndarray:
+    
+    if not os.path.exists(glb_path):
+        raise RuntimeError(f"File not found: {glb_path}")
+    
     gltf, bin_chunk = _load_glb_json_and_bin(glb_path)
     materials = gltf.get("materials", [])
     textures = gltf.get("textures", [])
     images = gltf.get("images", [])
     buffer_views = gltf.get("bufferViews", [])
+
     if not materials:
         raise RuntimeError("No materials in GLB")
+    
     pbr = materials[0].get("pbrMetallicRoughness", {})
     base_tex_index = pbr.get("baseColorTexture", {}).get("index", None)
     if base_tex_index is None:
         raise RuntimeError("Material has no baseColorTexture")
     if base_tex_index >= len(textures):
         raise RuntimeError("baseColorTexture index out of range")
+    
     tex = textures[base_tex_index]
     img_index = tex.get("source", None)
     if img_index is None or img_index >= len(images):
         raise RuntimeError("Texture has no valid image source")
+    
     img_info = images[img_index]
     bv_index = img_info.get("bufferView", None)
-    mime = img_info.get("mimeType", None)
     if bv_index is None:
         uri = img_info.get("uri", None)
         raise RuntimeError(f"Image is not embedded (bufferView missing). uri={uri}")
     if bv_index >= len(buffer_views):
         raise RuntimeError("image.bufferView out of range")
+    
+    mime = img_info.get("mimeType", None)
+    
     bv = buffer_views[bv_index]
     bo = int(bv.get("byteOffset", 0))
     bl = int(bv.get("byteLength", 0))
@@ -135,12 +148,16 @@ def _extract_basecolor_texture_image(glb_path: str, debug_print: bool = False) -
             f"[Texture] baseColorTextureIndex={base_tex_index}, imageIndex={img_index}, "
             f"bufferView={bv_index}, mime={mime}, bytes={len(img_bytes)}"
         )
+
     pil = Image.open(trimesh.util.wrap_as_stream(img_bytes)).convert("RGBA")
     return np.array(pil, dtype=np.uint8)
 
 
 def _merge_palette_rgb(
-    palette_rgb: np.ndarray, counts: np.ndarray, merge_dist: float, debug_print: bool = False
+    palette_rgb: np.ndarray, 
+    counts: np.ndarray, 
+    merge_dist: float, 
+    debug_print: bool = False
 ) -> np.ndarray:
     if palette_rgb is None or len(palette_rgb) == 0:
         return palette_rgb
@@ -483,6 +500,7 @@ def split_glb_by_texture_palette_rgb(
         out_glb_path = _default_out_path(in_glb_path)
 
     tex_rgba = _extract_basecolor_texture_image(in_glb_path, debug_print=debug_print)
+
     palette_rgb = _build_palette_rgb(
         tex_rgba,
         color_quant_step=color_quant_step,
@@ -554,7 +572,7 @@ def split_glb_by_texture_palette_rgb(
         for lab, face_ids in groups.items():
             if len(face_ids) < min_faces_per_part:
                 continue
-            sub = mesh.submesh([np.array(face_ids, dtype=np.int64)], append=True, repair=False)
+            sub = mesh.submesh([np.array(face_ids, dtype=np.int64)], append=True, repair=True)
             if sub is None:
                 continue
             if isinstance(sub, (list, tuple)):

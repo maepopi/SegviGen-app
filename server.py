@@ -190,6 +190,7 @@ class FullParams(BaseModel):
     remesh: bool = True
     remesh_band: int = 1
     remesh_project: int = 0
+    remesh_method: str = "pymeshlab"
 
 
 class Full2DParams(BaseModel):
@@ -207,6 +208,7 @@ class Full2DParams(BaseModel):
     remesh: bool = True
     remesh_band: int = 1
     remesh_project: int = 0
+    remesh_method: str = "pymeshlab"
 
 
 class SplitParams(BaseModel):

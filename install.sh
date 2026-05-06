@@ -225,7 +225,7 @@ for d in site.getsitepackages():
 " 2>/dev/null || true
 
 # Server runtime deps (used by server.py / inference*.py)
-pip install fastapi "uvicorn[standard]" python-multipart trimesh tqdm
+pip install fastapi "uvicorn[standard]" python-multipart trimesh pymeshlab tqdm
 
 pip install "transformers==4.57.6"
 

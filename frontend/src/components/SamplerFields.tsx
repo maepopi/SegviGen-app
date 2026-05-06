@@ -7,7 +7,7 @@ const DEFAULTS: SamplerParams = {
   steps: 25, rescale_t: 1.0, guidance_strength: 7.5, guidance_rescale: 0.0,
   guidance_interval_start: 0.0, guidance_interval_end: 1.0,
   decimation_target: 100_000, texture_size: 1024,
-  remesh: true, remesh_band: 1, remesh_project: 0,
+  remesh: true, remesh_band: 1, remesh_project: 0, remesh_method: 'pymeshlab',
 }
 
 export function useSamplerDefaults(): SamplerParams { return { ...DEFAULTS } }
@@ -54,6 +54,12 @@ export function SamplerFields({ value, onChange, presets }: Props) {
       <CheckField label="Remesh"                    checked={value.remesh}       onChange={p('remesh')} />
       <SliderField label="Remesh band"              min={0} max={4} step={1}     value={value.remesh_band}    onChange={p('remesh_band')} />
       <SliderField label="Remesh project"           min={0} max={4} step={1}     value={value.remesh_project} onChange={p('remesh_project')} />
+      <Field label="Remesh method">
+        <Select value={value.remesh_method} onChange={e => p('remesh_method')(e.target.value as 'pymeshlab' | 'ovoxel')}>
+          <option value="pymeshlab">pymeshlab</option>
+          <option value="ovoxel">ovoxel</option>
+        </Select>
+      </Field>
     </div>
   )
 }

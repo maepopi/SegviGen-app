@@ -13,7 +13,9 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import json
 from collections import OrderedDict
 from types import MethodType
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
+
+from segvigen._postprocess import remesh_triangles
 
 import numpy as np
 import torch
@@ -253,7 +255,8 @@ def get_cond(image_cond_model, image):
 
 def slat_to_glb(meshes, tex_voxels, resolution: int = 512,
                 decimation_target: int = 100000, texture_size: int = 4096,
-                remesh: bool = True, remesh_band: int = 1, remesh_project: int = 0):
+                remesh: bool = True, remesh_band: int = 1, remesh_project: int = 0,
+                remesh_method: Literal["pymeshlab", "ovoxel"] = "pymeshlab"):
     """Decode sparse texture latents + meshes into a GLB scene."""
     pbr_attr_layout = {
         'base_color': slice(0, 3),
@@ -287,11 +290,13 @@ def slat_to_glb(meshes, tex_voxels, resolution: int = 512,
         aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
         decimation_target=decimation_target,
         texture_size=texture_size,
-        remesh=remesh,
+        remesh=remesh and remesh_method == "ovoxel",
         remesh_band=remesh_band,
         remesh_project=remesh_project,
         verbose=True
     )
+    if remesh and remesh_method == "pymeshlab":
+        glb = remesh_triangles(glb, target_faces=decimation_target)
     # Undo the Z-up → Y-up axis swap that to_glb applies, since our input
     # GLB was already Y-up.  Inverse of (x,y,z)→(x,z,−y) is (x,−z,y) = +90° about X.
     rot = np.array([
