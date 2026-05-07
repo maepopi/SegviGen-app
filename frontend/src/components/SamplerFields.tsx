@@ -31,9 +31,10 @@ export function SamplerFields({ value, onChange, presets }: Props) {
         <PresetBar
           onPreset={name => onChange({ ...DEFAULTS, ...presets[name] })}
           options={[
-            { name: 'fast',     label: '⚡ Fast' },
-            { name: 'balanced', label: '⚖ Balanced', primary: true },
-            { name: 'quality',  label: '✨ Quality' },
+            { name: 'fast',          label: '⚡ Fast' },
+            { name: 'balanced',      label: '⚖ Balanced', primary: true },
+            { name: 'quality',       label: '✨ Quality' },
+            { name: 'quality_ovoxel', label: '✨ Quality (ovoxel)' },
           ]}
         />
       )}
@@ -51,15 +52,17 @@ export function SamplerFields({ value, onChange, presets }: Props) {
           {[512, 1024, 2048, 4096].map(s => <option key={s} value={s}>{s}</option>)}
         </Select>
       </Field>
-      <CheckField label="Remesh"                    checked={value.remesh}       onChange={p('remesh')} />
-      <SliderField label="Remesh band"              min={0} max={4} step={1}     value={value.remesh_band}    onChange={p('remesh_band')} />
-      <SliderField label="Remesh project"           min={0} max={4} step={1}     value={value.remesh_project} onChange={p('remesh_project')} />
       <Field label="Remesh method">
         <Select value={value.remesh_method} onChange={e => p('remesh_method')(e.target.value as 'pymeshlab' | 'ovoxel')}>
           <option value="pymeshlab">pymeshlab</option>
           <option value="ovoxel">ovoxel</option>
         </Select>
       </Field>
+      <CheckField label="Remesh" checked={value.remesh} onChange={p('remesh')} />
+      {value.remesh_method === 'ovoxel' && <>
+        <SliderField label="Remesh band"    min={0} max={4} step={1} value={value.remesh_band}    onChange={p('remesh_band')} />
+        <SliderField label="Remesh project" min={0} max={4} step={1} value={value.remesh_project} onChange={p('remesh_project')} />
+      </>}
     </div>
   )
 }

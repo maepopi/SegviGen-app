@@ -253,10 +253,11 @@ def get_cond(image_cond_model, image):
 
 # ─── GLB export ────────────────────────────────────────────────────────────────
 
-def slat_to_glb(meshes, tex_voxels, resolution: int = 512,
-                decimation_target: int = 100000, texture_size: int = 4096,
-                remesh: bool = True, remesh_band: int = 1, remesh_project: int = 0,
-                remesh_method: Literal["pymeshlab", "ovoxel"] = "pymeshlab"):
+def slat_to_glb(
+    meshes, tex_voxels, resolution: int = 512,
+    decimation_target: int = 100000, texture_size: int = 4096,
+    remesh: bool = True, remesh_band: int = 1, remesh_project: int = 0, remesh_method: Literal["pymeshlab", "ovoxel"] = "pymeshlab"
+) -> trimesh.Trimesh:
     """Decode sparse texture latents + meshes into a GLB scene."""
     pbr_attr_layout = {
         'base_color': slice(0, 3),
@@ -280,6 +281,7 @@ def slat_to_glb(meshes, tex_voxels, resolution: int = 512,
         )
     mesh = out_mesh[0]
     mesh.simplify(10000000)
+    print(f"[slat_to_glb] method={remesh_method!r}  remesh={remesh}  decimation_target={decimation_target}")
     glb = o_voxel.postprocess.to_glb(
         vertices=mesh.vertices,
         faces=mesh.faces,
@@ -288,15 +290,19 @@ def slat_to_glb(meshes, tex_voxels, resolution: int = 512,
         attr_layout=mesh.layout,
         voxel_size=mesh.voxel_size,
         aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
-        decimation_target=decimation_target,
+        decimation_target=decimation_target if remesh_method=="ovoxel" else 10_000_000,
         texture_size=texture_size,
-        remesh=remesh and remesh_method == "ovoxel",
+        remesh=remesh and remesh_method=="ovoxel",
         remesh_band=remesh_band,
         remesh_project=remesh_project,
         verbose=True
     )
-    if remesh and remesh_method == "pymeshlab":
-        glb = remesh_triangles(glb, target_faces=decimation_target)
+    if remesh_method == "pymeshlab" and remesh:
+        print(f"[slat_to_glb] running pymeshlab isotropic remesh (target ~{decimation_target} faces)")
+        glb = remesh_triangles(glb, decimation_target=decimation_target)
+        print(f"[slat_to_glb] pymeshlab done → {len(glb.faces)} faces")
+    elif remesh_method == "pymeshlab" and not remesh:
+        print("[slat_to_glb] pymeshlab remesh skipped (remesh=False)")
     # Undo the Z-up → Y-up axis swap that to_glb applies, since our input
     # GLB was already Y-up.  Inverse of (x,y,z)→(x,z,−y) is (x,−z,y) = +90° about X.
     rot = np.array([

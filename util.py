@@ -101,10 +101,9 @@ def _load_glb_json_and_bin(glb_path: str) -> Tuple[dict, bytes]:
 
 
 def _extract_basecolor_texture_image(
-    glb_path: str, 
-    debug_print: bool = False
+    glb_path: str,
+    debug_print: bool = False,
 ) -> np.ndarray:
-    
     if not os.path.exists(glb_path):
         raise RuntimeError(f"File not found: {glb_path}")
     
@@ -572,7 +571,7 @@ def split_glb_by_texture_palette_rgb(
         for lab, face_ids in groups.items():
             if len(face_ids) < min_faces_per_part:
                 continue
-            sub = mesh.submesh([np.array(face_ids, dtype=np.int64)], append=True, repair=True)
+            sub = mesh.submesh([np.array(face_ids, dtype=np.int64)], append=True, repair=False)
             if sub is None:
                 continue
             if isinstance(sub, (list, tuple)):
@@ -683,30 +682,94 @@ def _render_views_bpy(
     view_cameras: Dict[str, List[List[float]]],
     resolution: int = 512,
 ) -> Dict[str, Image.Image]:
-    import bpy
-    from data_toolkit.bpy_render import BpyRenderer
+    try:
+        import bpy
+        from data_toolkit.bpy_render import BpyRenderer
 
-    renderer = BpyRenderer(resolution=resolution, engine="CYCLES")
-    renderer.init_render_settings()
-    renderer.init_scene()
-    renderer.load_object(glb_path)
-    renderer.normalize_scene()
-    cam = renderer.init_camera()
-    renderer.init_lighting()
-    cam.data.lens = 16 / math.tan(0.698 / 2)
+        renderer = BpyRenderer(resolution=resolution, engine="CYCLES")
+        renderer.init_render_settings()
+        renderer.init_scene()
+        renderer.load_object(glb_path)
+        renderer.normalize_scene()
+        cam = renderer.init_camera()
+        renderer.init_lighting()
+        cam.data.lens = 16 / math.tan(0.698 / 2)
 
-    results: Dict[str, Image.Image] = {}
-    for view_name, matrix in view_cameras.items():
-        renderer.set_camera_from_matrix(cam, matrix)
-        bpy.context.view_layer.update()
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-            out_path = f.name
-        bpy.context.scene.render.filepath = out_path
-        bpy.ops.render.render(write_still=True)
-        results[view_name] = Image.open(out_path).convert("RGB")
-        print(f"  rendered {view_name} → {out_path}")
+        results: Dict[str, Image.Image] = {}
+        for view_name, matrix in view_cameras.items():
+            renderer.set_camera_from_matrix(cam, matrix)
+            bpy.context.view_layer.update()
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+                out_path = f.name
+            bpy.context.scene.render.filepath = out_path
+            bpy.ops.render.render(write_still=True)
+            results[view_name] = Image.open(out_path).convert("RGB")
+            print(f"  rendered {view_name} → {out_path}")
 
-    return results
+        return results
+    except (ImportError, OSError) as e:
+        # Fall back to standalone Blender
+        print(f"  bpy import failed ({e}), using standalone Blender")
+        return _render_views_blender_subprocess(glb_path, view_cameras, resolution)
+
+
+def _render_views_blender_subprocess(
+    glb_path: str,
+    view_cameras: Dict[str, List[List[float]]],
+    resolution: int = 512,
+) -> Dict[str, Image.Image]:
+    """Render using standalone Blender binary."""
+    import subprocess
+    import json
+
+    # Find Blender
+    blender_candidates = [
+        "/tmp/blender-4.0.2-linux-x64/blender",
+        "/usr/bin/blender",
+        "/usr/local/bin/blender",
+    ]
+    blender_path = None
+    for path in blender_candidates:
+        if os.path.isfile(path):
+            blender_path = path
+            break
+
+    if blender_path is None:
+        raise RuntimeError("Blender not found. Install via: apt-get install blender")
+
+    helper_script = os.path.join(os.path.dirname(__file__), "blender_render_helper.py")
+    if not os.path.isfile(helper_script):
+        raise RuntimeError(f"blender_render_helper.py not found at {helper_script}")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        cameras_json = json.dumps(view_cameras)
+
+        # Set PYTHONPATH so Blender can find data_toolkit
+        env = os.environ.copy()
+        project_root = os.path.dirname(__file__)
+        if 'PYTHONPATH' in env:
+            env['PYTHONPATH'] = f"{project_root}:{env['PYTHONPATH']}"
+        else:
+            env['PYTHONPATH'] = project_root
+
+        cmd = [
+            blender_path, "--background", "--python", helper_script, "--",
+            glb_path, cameras_json, str(resolution), tmpdir
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
+        if result.returncode != 0:
+            raise RuntimeError(f"Blender rendering failed:\n{result.stderr}")
+
+        # Parse output paths
+        output_paths = json.loads(result.stdout.strip().splitlines()[-1])
+
+        # Load rendered images
+        results: Dict[str, Image.Image] = {}
+        for view_name, png_path in output_paths.items():
+            results[view_name] = Image.open(png_path).convert("RGB")
+
+        return results
 
 
 def _render_main_view(

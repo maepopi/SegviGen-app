@@ -13,7 +13,7 @@ import traceback
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 # Suppress repetitive job-status polling from uvicorn access logs
 logging.getLogger("uvicorn.access").addFilter(
@@ -190,7 +190,7 @@ class FullParams(BaseModel):
     remesh: bool = True
     remesh_band: int = 1
     remesh_project: int = 0
-    remesh_method: str = "pymeshlab"
+    remesh_method: Literal["pymeshlab", "ovoxel"] = "pymeshlab"
 
 
 class Full2DParams(BaseModel):
@@ -208,7 +208,7 @@ class Full2DParams(BaseModel):
     remesh: bool = True
     remesh_band: int = 1
     remesh_project: int = 0
-    remesh_method: str = "pymeshlab"
+    remesh_method: Literal["pymeshlab", "ovoxel"] = "pymeshlab"
 
 
 class SplitParams(BaseModel):

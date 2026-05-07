@@ -4,15 +4,19 @@ SAMPLER_PRESETS = {
     "fast":     dict(steps=12,  rescale_t=1.0, guidance_strength=7.5, guidance_rescale=0.0,
                      guidance_interval_start=0.0, guidance_interval_end=1.0,
                      decimation_target=50_000,  texture_size=512,
-                     remesh=True, remesh_band=1, remesh_project=0),
+                     remesh=True, remesh_band=1, remesh_project=0, remesh_method='pymeshlab'),
     "balanced": dict(steps=25,  rescale_t=1.0, guidance_strength=7.5, guidance_rescale=0.0,
                      guidance_interval_start=0.0, guidance_interval_end=1.0,
                      decimation_target=100_000, texture_size=1024,
-                     remesh=True, remesh_band=1, remesh_project=0),
+                     remesh=True, remesh_band=1, remesh_project=0, remesh_method='pymeshlab'),
     "quality":  dict(steps=50,  rescale_t=1.5, guidance_strength=7.5, guidance_rescale=0.0,
                      guidance_interval_start=0.1, guidance_interval_end=0.9,
                      decimation_target=300_000, texture_size=2048,
-                     remesh=True, remesh_band=0, remesh_project=1),
+                     remesh=True, remesh_band=0, remesh_project=1, remesh_method='pymeshlab'),
+    "quality_ovoxel": dict(steps=50,  rescale_t=1.5, guidance_strength=7.5, guidance_rescale=0.0,
+                           guidance_interval_start=0.1, guidance_interval_end=0.9,
+                           decimation_target=300_000, texture_size=2048,
+                           remesh=True, remesh_band=1, remesh_project=0, remesh_method='ovoxel'),
 }
 
 SPLIT_PRESETS = {
